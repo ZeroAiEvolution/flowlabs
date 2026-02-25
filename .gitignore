@@ -26,3 +26,12 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Local Vercel linkage metadata
+.vercel/
+
+# Secret credential files
+client_secret*.json
+*-secret*.json
+*.pem
+*.key
