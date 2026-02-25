@@ -1,4 +1,4 @@
-<!doctype html>
+  <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -16,6 +16,59 @@
     <meta name="twitter:site" content="@FlowLabs" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <script>
+      (function () {
+        var AUTH_STORAGE_KEY = 'sb-utrprdkpxautghdtdwgk-auth-token';
+
+        function getStoredSession() {
+          try {
+            var raw = localStorage.getItem(AUTH_STORAGE_KEY);
+            if (!raw) return null;
+            var parsed = JSON.parse(raw);
+            return parsed && (parsed.currentSession || parsed.session || parsed);
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function isEmailVerified(session) {
+          var user = session && session.user;
+          return !!(user && (user.email_confirmed_at || user.confirmed_at));
+        }
+
+        function enforceVerifiedAccess() {
+          if (!window.location.pathname.startsWith('/home')) return;
+
+          var session = getStoredSession();
+          if (!session || !isEmailVerified(session)) {
+            sessionStorage.setItem('flowlabs_verify_notice', '1');
+            window.location.replace('/?verify=1');
+          }
+        }
+
+        var originalPushState = history.pushState.bind(history);
+        history.pushState = function () {
+          originalPushState.apply(history, arguments);
+          enforceVerifiedAccess();
+        };
+
+        var originalReplaceState = history.replaceState.bind(history);
+        history.replaceState = function () {
+          originalReplaceState.apply(history, arguments);
+          enforceVerifiedAccess();
+        };
+
+        window.addEventListener('popstate', enforceVerifiedAccess);
+        enforceVerifiedAccess();
+
+        if (window.location.search.includes('verify=1') && sessionStorage.getItem('flowlabs_verify_notice') === '1') {
+          sessionStorage.removeItem('flowlabs_verify_notice');
+          setTimeout(function () {
+            window.alert('Please verify your email before accessing Home.');
+          }, 100);
+        }
+      })();
+    </script>
     <script type="module" crossorigin src="/assets/index-wK2y5gvx.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-BmdDgh3_.css">
   </head>
