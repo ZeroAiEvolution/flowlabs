@@ -16,9 +16,217 @@
     <meta name="twitter:site" content="@FlowLabs" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <style>
+      #flowlabs-toast-root {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-width: 360px;
+      }
+
+      .flowlabs-toast {
+        background: #111;
+        color: #fff;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-size: 13px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      }
+
+      .flowlabs-toast.success { border-color: #1f7a3a; }
+      .flowlabs-toast.warning { border-color: #8a6b10; }
+      .flowlabs-toast.error { border-color: #8a1b1b; }
+
+      #flowlabs-status-card {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        z-index: 9998;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 12px 14px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        font-size: 14px;
+        display: none;
+      }
+
+      #flowlabs-retry-banner {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        top: 16px;
+        z-index: 10000;
+        display: none;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        background: #fffbe6;
+        border: 1px solid #e5cf7d;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+
+      #flowlabs-retry-banner button {
+        border: 1px solid #222;
+        background: #111;
+        color: #fff;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      #flowlabs-skeleton {
+        position: fixed;
+        inset: 0;
+        z-index: 9997;
+        background: linear-gradient(180deg, #f7f7f7, #efefef);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #flowlabs-skeleton .pulse {
+        width: 240px;
+        height: 16px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
+        background-size: 400% 100%;
+        animation: flowlabsPulse 1.3s ease infinite;
+      }
+
+      @keyframes flowlabsPulse {
+        0% { background-position: 100% 50%; }
+        100% { background-position: 0 50%; }
+      }
+
+      .flowlabs-field-error {
+        color: #b91c1c;
+        font-size: 12px;
+        margin-top: 6px;
+      }
+    </style>
     <script>
       (function () {
         var AUTH_STORAGE_KEY = 'sb-utrprdkpxautghdtdwgk-auth-token';
+        var lastFailedRequest = null;
+
+        function ensureToastRoot() {
+          var root = document.getElementById('flowlabs-toast-root');
+          if (!root) {
+            root = document.createElement('div');
+            root.id = 'flowlabs-toast-root';
+            document.body.appendChild(root);
+          }
+          return root;
+        }
+
+        function showToast(message, type) {
+          var root = ensureToastRoot();
+          var item = document.createElement('div');
+          item.className = 'flowlabs-toast ' + (type || 'info');
+          item.textContent = message;
+          root.appendChild(item);
+          setTimeout(function () {
+            if (item.parentNode) item.parentNode.removeChild(item);
+          }, 4200);
+        }
+
+        function ensureStatusCard() {
+          var card = document.getElementById('flowlabs-status-card');
+          if (!card) {
+            card = document.createElement('div');
+            card.id = 'flowlabs-status-card';
+            document.body.appendChild(card);
+          }
+          return card;
+        }
+
+        function showStatusCard(message) {
+          var card = ensureStatusCard();
+          card.textContent = message;
+          card.style.display = 'block';
+          setTimeout(function () {
+            card.style.display = 'none';
+          }, 6000);
+        }
+
+        function ensureRetryBanner() {
+          var el = document.getElementById('flowlabs-retry-banner');
+          if (el) return el;
+
+          el = document.createElement('div');
+          el.id = 'flowlabs-retry-banner';
+          el.innerHTML = '<span id="flowlabs-retry-text">Network issue detected.</span><button id="flowlabs-retry-btn" type="button">Retry</button>';
+          document.body.appendChild(el);
+
+          var btn = el.querySelector('#flowlabs-retry-btn');
+          btn.addEventListener('click', function () {
+            if (!lastFailedRequest) {
+              window.location.reload();
+              return;
+            }
+
+            fetch.apply(window, lastFailedRequest).then(function () {
+              el.style.display = 'none';
+              showToast('Retry successful.', 'success');
+            }).catch(function () {
+              showToast('Retry failed. Check connection and try again.', 'error');
+            });
+          });
+
+          return el;
+        }
+
+        function showRetryBanner(message) {
+          var el = ensureRetryBanner();
+          var text = el.querySelector('#flowlabs-retry-text');
+          if (text) text.textContent = message || 'Network issue detected.';
+          el.style.display = 'flex';
+        }
+
+        function hideRetryBanner() {
+          var el = document.getElementById('flowlabs-retry-banner');
+          if (el) el.style.display = 'none';
+        }
+
+        function createSkeleton() {
+          if (document.getElementById('flowlabs-skeleton')) return;
+          var el = document.createElement('div');
+          el.id = 'flowlabs-skeleton';
+          el.innerHTML = '<div class="pulse" aria-label="Loading"></div>';
+          document.body.appendChild(el);
+        }
+
+        function removeSkeleton() {
+          var el = document.getElementById('flowlabs-skeleton');
+          if (el && el.parentNode) el.parentNode.removeChild(el);
+        }
+
+        function observeAppMount() {
+          var root = document.getElementById('root');
+          if (!root) return;
+          if (root.children.length > 0) {
+            removeSkeleton();
+            return;
+          }
+
+          var observer = new MutationObserver(function () {
+            if (root.children.length > 0) {
+              removeSkeleton();
+              observer.disconnect();
+            }
+          });
+          observer.observe(root, { childList: true });
+        }
 
         function getStoredSession() {
           try {
@@ -46,6 +254,135 @@
           }
         }
 
+        function setFieldError(input, message) {
+          if (!input || !input.parentElement) return;
+
+          var host = input.parentElement.parentElement || input.parentElement;
+          var err = host.querySelector('.flowlabs-field-error');
+          if (!err) {
+            err = document.createElement('p');
+            err.className = 'flowlabs-field-error';
+            host.appendChild(err);
+          }
+
+          err.textContent = message || '';
+          err.style.display = message ? 'block' : 'none';
+        }
+
+        function validateInput(input) {
+          if (!input) return true;
+          var type = (input.getAttribute('type') || '').toLowerCase();
+          var placeholder = (input.getAttribute('placeholder') || '').toLowerCase();
+          var value = (input.value || '').trim();
+
+          if (type === 'email' || placeholder.indexOf('email') !== -1) {
+            var okEmail = /^\S+@\S+\.\S+$/.test(value);
+            if (!okEmail) {
+              setFieldError(input, 'Enter a valid email address.');
+              return false;
+            }
+          }
+
+          if (type === 'password' || placeholder.indexOf('password') !== -1) {
+            if (value.length < 6) {
+              setFieldError(input, 'Password must be at least 6 characters.');
+              return false;
+            }
+          }
+
+          if (placeholder.indexOf('full name') !== -1) {
+            if (value.length < 2) {
+              setFieldError(input, 'Name must be at least 2 characters.');
+              return false;
+            }
+          }
+
+          setFieldError(input, '');
+          return true;
+        }
+
+        function wireValidationAndSubmitProtection() {
+          document.addEventListener('blur', function (event) {
+            var target = event.target;
+            if (!target || target.tagName !== 'INPUT') return;
+            validateInput(target);
+          }, true);
+
+          document.addEventListener('input', function (event) {
+            var target = event.target;
+            if (!target || target.tagName !== 'INPUT') return;
+            if (target.value && target.value.trim().length > 0) validateInput(target);
+          }, true);
+
+          document.addEventListener('submit', function (event) {
+            var form = event.target;
+            if (!form || form.tagName !== 'FORM') return;
+
+            var inputs = form.querySelectorAll('input');
+            var allValid = true;
+            for (var i = 0; i < inputs.length; i++) {
+              if (!validateInput(inputs[i])) allValid = false;
+            }
+
+            if (!allValid) {
+              event.preventDefault();
+              showToast('Please fix highlighted fields first.', 'warning');
+              return;
+            }
+
+            var submits = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+            for (var j = 0; j < submits.length; j++) {
+              var btn = submits[j];
+              if (btn.dataset && btn.dataset.flowlabsLocked === '1') {
+                event.preventDefault();
+                return;
+              }
+              if (btn.dataset) btn.dataset.flowlabsLocked = '1';
+              btn.disabled = true;
+              btn.setAttribute('aria-busy', 'true');
+            }
+
+            setTimeout(function () {
+              for (var k = 0; k < submits.length; k++) {
+                var node = submits[k];
+                node.disabled = false;
+                node.removeAttribute('aria-busy');
+                if (node.dataset) node.dataset.flowlabsLocked = '0';
+              }
+            }, 3000);
+          }, true);
+        }
+
+        function wireNetworkResilience() {
+          var originalFetch = window.fetch;
+          if (typeof originalFetch === 'function') {
+            window.fetch = function () {
+              var args = arguments;
+              return originalFetch.apply(window, args).then(function (response) {
+                if (response && response.status >= 500) {
+                  lastFailedRequest = args;
+                  showRetryBanner('Server issue detected. You can retry.');
+                }
+                return response;
+              }).catch(function (error) {
+                lastFailedRequest = args;
+                showRetryBanner('Connection issue detected. Please retry.');
+                showToast('Network error. Please retry.', 'error');
+                throw error;
+              });
+            };
+          }
+
+          window.addEventListener('offline', function () {
+            showRetryBanner('You are offline. Check internet and retry.');
+          });
+
+          window.addEventListener('online', function () {
+            hideRetryBanner();
+            showToast('Back online.', 'success');
+          });
+        }
+
         var originalPushState = history.pushState.bind(history);
         history.pushState = function () {
           originalPushState.apply(history, arguments);
@@ -61,10 +398,16 @@
         window.addEventListener('popstate', enforceVerifiedAccess);
         enforceVerifiedAccess();
 
+        createSkeleton();
+        observeAppMount();
+        wireValidationAndSubmitProtection();
+        wireNetworkResilience();
+
         if (window.location.search.includes('verify=1') && sessionStorage.getItem('flowlabs_verify_notice') === '1') {
           sessionStorage.removeItem('flowlabs_verify_notice');
           setTimeout(function () {
-            window.alert('Please verify your email before accessing Home.');
+            showToast('Please verify your email before accessing Home.', 'warning');
+            showStatusCard('Verification required: check your inbox and click verification link, then sign in.');
           }, 100);
         }
       })();
