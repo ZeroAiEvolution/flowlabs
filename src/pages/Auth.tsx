@@ -53,42 +53,45 @@ const Auth = () => {
 
   useEffect(() => {
     const checkUser = async () => {
-      if (user) {
-        // Check if profile exists and has profession
-        try {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('profession')
-            .eq('user_id', user.id)
-            .single();
+      if (!user) return;
 
-          if (!profile?.profession) {
-            setShowProfessionSelection(true);
-          } else {
-            navigate('/home');
-          }
-        } catch (error) {
-          console.error("Error checking profile", error);
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('profession')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!profile?.profession) {
+          setShowProfessionSelection(true);
+        } else {
           navigate('/home');
         }
+      } catch (error) {
+        console.error('Error checking profile', error);
+        navigate('/home');
       }
     };
+
     checkUser();
   }, [user, navigate]);
-
 
   const handleProfessionSelect = async (profession: Profession) => {
     if (!user) return;
     setIsLoading(true);
+
     try {
       const { error } = await supabase
         .from('profiles')
-        .upsert({
-          user_id: user.id,
-          profession,
-          full_name: user.user_metadata?.full_name || formData.fullName || 'User',
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' });
+        .upsert(
+          {
+            user_id: user.id,
+            profession,
+            full_name: user.user_metadata?.full_name || formData.fullName || 'User',
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        );
 
       if (error) {
         toast.error('Failed to update profile');
@@ -153,19 +156,28 @@ const Auth = () => {
       if (isSignUp) {
         const { error } = await signUp(formData.email, formData.password, formData.fullName, formData.profession as Profession);
         if (error) {
-          if (error.message.includes('already registered')) {
+          if (error.message.toLowerCase().includes('invalid api key')) {
+            toast.error('Authentication is misconfigured. Please check Vercel environment keys.');
+          } else if (error.message.includes('already registered')) {
             toast.error('This email is already registered. Please sign in instead.');
           } else {
             toast.error(error.message);
           }
         } else {
-          toast.success('Account created successfully!');
-          navigate('/home');
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            toast.success('Account created successfully!');
+            navigate('/home');
+          } else {
+            toast.success('Account created. Please verify your email, then sign in.');
+          }
         }
       } else {
         const { error } = await signIn(formData.email, formData.password);
         if (error) {
-          if (error.message.includes('Invalid login')) {
+          if (error.message.toLowerCase().includes('invalid api key')) {
+            toast.error('Authentication is misconfigured. Please check Vercel environment keys.');
+          } else if (error.message.includes('Invalid login')) {
             toast.error('Invalid email or password. Please try again.');
           } else {
             toast.error(error.message);
@@ -185,7 +197,11 @@ const Auth = () => {
     setIsLoading(true);
     const { error } = await signInWithGoogle();
     if (error) {
-      toast.error(error.message);
+      if (error.message.toLowerCase().includes('invalid api key')) {
+        toast.error('Google login is misconfigured. Please check Vercel environment keys.');
+      } else {
+        toast.error(error.message);
+      }
     }
     setIsLoading(false);
   };
@@ -279,24 +295,24 @@ const Auth = () => {
                       <button
                         type="button"
                         onClick={() => setFormData({ ...formData, profession: 'student' })}
-                        className={`p - 4 rounded - 2xl border - 2 transition - all flex flex - col items - center gap - 2 ${formData.profession === 'student'
+                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${formData.profession === 'student'
                             ? 'border-primary bg-primary/10'
                             : 'border-border hover:border-primary/50'
                           } `}
                       >
-                        <GraduationCap className={`w - 8 h - 8 ${formData.profession === 'student' ? 'text-primary' : 'text-muted-foreground'} `} />
-                        <span className={`font - medium ${formData.profession === 'student' ? 'text-primary' : ''} `}>Student</span>
+                        <GraduationCap className={`w-8 h-8 ${formData.profession === 'student' ? 'text-primary' : 'text-muted-foreground'} `} />
+                        <span className={`font-medium ${formData.profession === 'student' ? 'text-primary' : ''} `}>Student</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setFormData({ ...formData, profession: 'professional' })}
-                        className={`p - 4 rounded - 2xl border - 2 transition - all flex flex - col items - center gap - 2 ${formData.profession === 'professional'
+                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${formData.profession === 'professional'
                             ? 'border-primary bg-primary/10'
                             : 'border-border hover:border-primary/50'
                           } `}
                       >
-                        <Briefcase className={`w - 8 h - 8 ${formData.profession === 'professional' ? 'text-primary' : 'text-muted-foreground'} `} />
-                        <span className={`font - medium ${formData.profession === 'professional' ? 'text-primary' : ''} `}>Professional</span>
+                        <Briefcase className={`w-8 h-8 ${formData.profession === 'professional' ? 'text-primary' : 'text-muted-foreground'} `} />
+                        <span className={`font-medium ${formData.profession === 'professional' ? 'text-primary' : ''} `}>Professional</span>
                       </button>
                     </div>
                     {errors.profession && (
