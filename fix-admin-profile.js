@@ -35,17 +35,39 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false }
 });
 
+async function findAuthUserByEmail(email) {
+    const normalizedEmail = email.trim().toLowerCase();
+    let page = 1;
+    const perPage = 200;
+
+    while (true) {
+        const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+        if (error) {
+            throw new Error(`Error listing users: ${error.message}`);
+        }
+
+        const users = data?.users ?? [];
+        const foundUser = users.find((u) => (u.email || '').toLowerCase() === normalizedEmail);
+        if (foundUser) {
+            return foundUser;
+        }
+
+        if (users.length < perPage) {
+            return null;
+        }
+
+        page += 1;
+    }
+}
+
 async function fixAdminProfile() {
     console.log('Fixing Admin Profile...');
 
-    const MAIN_EMAIL = 'admin@flowlab.connect';
+    const MAIN_EMAIL = env.MAIN_ADMIN_EMAIL || 'admin@flowlab.connect';
 
     try {
         // 1. Get Main Admin ID
-        const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
-        if (listError) return console.error('Error listing users:', listError);
-
-        const mainAdmin = users.find(u => u.email === MAIN_EMAIL);
+        const mainAdmin = await findAuthUserByEmail(MAIN_EMAIL);
 
         if (!mainAdmin) {
             console.error(`Main admin (${MAIN_EMAIL}) not found!`);

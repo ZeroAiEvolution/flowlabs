@@ -4,7 +4,13 @@ import fs from 'fs';
 import path from 'path';
 
 const envPath = path.resolve(process.cwd(), '.env');
-const envContent = fs.readFileSync(envPath, 'utf-8');
+let envContent = '';
+try {
+    envContent = fs.readFileSync(envPath, 'utf-8');
+} catch (error) {
+    console.error('Could not read .env file');
+    process.exit(1);
+}
 const env = {};
 envContent.split('\n').forEach(line => {
     const parts = line.split('=');

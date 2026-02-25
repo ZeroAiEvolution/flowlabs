@@ -35,6 +35,31 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false }
 });
 
+async function findAuthUserByEmail(email) {
+    const normalizedEmail = email.trim().toLowerCase();
+    let page = 1;
+    const perPage = 200;
+
+    while (true) {
+        const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+        if (error) {
+            throw new Error(`Error listing users: ${error.message}`);
+        }
+
+        const users = data?.users ?? [];
+        const foundUser = users.find((u) => (u.email || '').toLowerCase() === normalizedEmail);
+        if (foundUser) {
+            return foundUser;
+        }
+
+        if (users.length < perPage) {
+            return null;
+        }
+
+        page += 1;
+    }
+}
+
 async function createBlockedUser() {
     console.log('Creating User (Bypassing Rate Limit)...');
 
@@ -50,13 +75,7 @@ async function createBlockedUser() {
 
     try {
         // 1. Check if user exists
-        const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
-        if (listError) {
-            console.error('Error listing users:', listError.message);
-            return;
-        }
-
-        let existingUser = users.find(u => u.email === email);
+        const existingUser = await findAuthUserByEmail(email);
 
         if (existingUser) {
             console.log('User already exists. Updating/Confirming...');
@@ -108,7 +127,7 @@ async function ensureProfile(userId, fullName, profession) {
     const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('user_id', userId)
         .maybeSingle();
 
     if (profileError) {
