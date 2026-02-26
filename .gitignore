@@ -33,3 +33,4 @@ client_secret*.json
 *service-account*.json
 .vercel
 .env*.local
+temp_extract/
