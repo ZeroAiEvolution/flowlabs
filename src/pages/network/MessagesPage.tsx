@@ -192,6 +192,24 @@ const MessagesPage = () => {
         }
     }, [activeChat, currentProfileId]);
 
+    // Fallback live sync: short polling while chat is open.
+    // This keeps messages near-realtime even if realtime publication is not active.
+    useEffect(() => {
+        if (!activeChat || !currentProfileId) return;
+
+        const poll = async () => {
+            if (document.hidden) return;
+            await fetchMessages(activeChat.id, currentProfileId);
+            await fetchConversations(currentProfileId);
+        };
+
+        const intervalId = window.setInterval(poll, 2500);
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, [activeChat, currentProfileId]);
+
     // block statuses removed
 
 
