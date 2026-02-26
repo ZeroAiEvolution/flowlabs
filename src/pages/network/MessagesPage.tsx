@@ -52,6 +52,8 @@ const MessagesPage = () => {
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const activeChatRef = useRef<ChatUser | null>(null);
     const currentProfileIdRef = useRef<string | null>(null);
+    const messageIdsSeenRef = useRef<Set<string>>(new Set());
+    const noEntryAnimationIdsRef = useRef<Set<string>>(new Set());
 
     // Initial load: get profile ID then conversations
     useEffect(() => {
@@ -114,6 +116,9 @@ const MessagesPage = () => {
                 next[idx] = { ...next[idx], ...incoming };
                 return next;
             }
+
+            messageIdsSeenRef.current.add(incoming.id);
+            noEntryAnimationIdsRef.current.add(incoming.id);
 
             const container = messagesContainerRef.current;
             const isNearBottom = !!container
@@ -322,6 +327,14 @@ const MessagesPage = () => {
             // Filter out messages deleted for me locally to avoid flashes
             const visibleMessages = data.filter(m => !m.deleted_for?.includes(myProfileId));
 
+            // Mark any newly discovered IDs (via polling/fetch) to skip entry animation.
+            for (const msg of visibleMessages) {
+                if (!messageIdsSeenRef.current.has(msg.id)) {
+                    noEntryAnimationIdsRef.current.add(msg.id);
+                    messageIdsSeenRef.current.add(msg.id);
+                }
+            }
+
             const container = messagesContainerRef.current;
             const isNearBottom = !!container
                 ? container.scrollHeight - container.scrollTop - container.clientHeight < 120
@@ -377,6 +390,8 @@ const MessagesPage = () => {
 
             if (error) throw error;
             if (data) {
+                messageIdsSeenRef.current.add(data.id);
+                noEntryAnimationIdsRef.current.add(data.id);
                 setMessages(prev => [...prev, data]);
                 scrollToBottom();
             }
@@ -610,12 +625,13 @@ const MessagesPage = () => {
                             {messages.map((msg, idx) => {
                                 const isMe = msg.sender_id === currentProfileId;
                                 const showAvatar = idx === messages.length - 1 || messages[idx + 1]?.sender_id !== msg.sender_id;
+                                const disableEntryAnimation = noEntryAnimationIdsRef.current.has(msg.id);
 
                                 return (
                                     <motion.div
-                                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                                        initial={disableEntryAnimation ? false : { opacity: 0, y: 20, scale: 0.95 }}
+                                        animate={disableEntryAnimation ? undefined : { opacity: 1, y: 0, scale: 1 }}
+                                        transition={disableEntryAnimation ? undefined : { type: "spring", stiffness: 300, damping: 20 }}
                                         key={msg.id}
                                         className={cn(
                                             "flex w-full gap-4 group/msg relative",
