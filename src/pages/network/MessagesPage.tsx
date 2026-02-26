@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '../../integrations/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -48,8 +48,9 @@ const MessagesPage = () => {
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
     const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
-    const [isBlocked, setIsBlocked] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const activeChatRef = useRef<ChatUser | null>(null);
+    const currentProfileIdRef = useRef<string | null>(null);
 
     // Initial load: get profile ID then conversations
     useEffect(() => {
@@ -78,32 +79,98 @@ const MessagesPage = () => {
         }
     }, [user]);
 
-    // Subsection to messages (needs currentProfileId)
+    useEffect(() => {
+        activeChatRef.current = activeChat;
+    }, [activeChat]);
+
+    useEffect(() => {
+        currentProfileIdRef.current = currentProfileId;
+    }, [currentProfileId]);
+
+    const upsertRealtimeMessage = useCallback((incoming: Message) => {
+        const myProfileId = currentProfileIdRef.current;
+        const currentChat = activeChatRef.current;
+
+        if (!myProfileId || !currentChat) return;
+
+        const belongsToActiveChat =
+            (incoming.sender_id === myProfileId && incoming.receiver_id === currentChat.id) ||
+            (incoming.sender_id === currentChat.id && incoming.receiver_id === myProfileId);
+
+        if (!belongsToActiveChat) return;
+
+        setMessages(prev => {
+            // If this message was deleted for me, remove if present.
+            if (incoming.deleted_for?.includes(myProfileId)) {
+                return prev.filter(m => m.id !== incoming.id);
+            }
+
+            const idx = prev.findIndex(m => m.id === incoming.id);
+            if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = { ...next[idx], ...incoming };
+                return next;
+            }
+
+            return [...prev, incoming].sort((a, b) => {
+                const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+                return at - bt;
+            });
+        });
+    }, []);
+
+    // Realtime: listen to message inserts/updates relevant to this user.
     useEffect(() => {
         if (!currentProfileId) return;
 
         const channel = supabase
-            .channel('public:messages')
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages',
-                filter: `receiver_id=eq.${currentProfileId}`
-            }, (payload) => {
-                // Update messages if looking at this chat
-                if (activeChat && payload.new.sender_id === activeChat.id) {
-                    setMessages(prev => [...prev, payload.new as Message]);
-                    scrollToBottom();
+            .channel(`messages-realtime-${currentProfileId}`)
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'messages' },
+                async (payload) => {
+                    const message = payload.new as Message;
+                    const myProfileId = currentProfileIdRef.current;
+                    if (!myProfileId) return;
+
+                    // Only handle messages involving me.
+                    if (message.sender_id !== myProfileId && message.receiver_id !== myProfileId) return;
+
+                    upsertRealtimeMessage(message);
+
+                    // Mark as read immediately if currently viewing this chat.
+                    const currentChat = activeChatRef.current;
+                    const viewingThisChat = !!currentChat && message.sender_id === currentChat.id && message.receiver_id === myProfileId;
+                    if (viewingThisChat && !message.is_read) {
+                        await supabase.from('messages').update({ is_read: true }).eq('id', message.id);
+                        setMessages(prev => prev.map(m => m.id === message.id ? { ...m, is_read: true } : m));
+                        setTimeout(scrollToBottom, 50);
+                    }
+
+                    fetchConversations(myProfileId);
                 }
-                // Refresh conversations list to update preview
-                fetchConversations(currentProfileId);
-            })
+            )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'messages' },
+                (payload) => {
+                    const message = payload.new as Message;
+                    const myProfileId = currentProfileIdRef.current;
+                    if (!myProfileId) return;
+
+                    // Only handle messages involving me.
+                    if (message.sender_id !== myProfileId && message.receiver_id !== myProfileId) return;
+
+                    upsertRealtimeMessage(message);
+                }
+            )
             .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [currentProfileId, activeChat]);
+    }, [currentProfileId, upsertRealtimeMessage]);
 
     useEffect(() => {
         if (initialUserId && conversations.length > 0 && !activeChat) {
