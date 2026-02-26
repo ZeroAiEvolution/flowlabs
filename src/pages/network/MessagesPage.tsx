@@ -48,7 +48,6 @@ const MessagesPage = () => {
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
     const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const activeChatRef = useRef<ChatUser | null>(null);
     const currentProfileIdRef = useRef<string | null>(null);
@@ -233,7 +232,9 @@ const MessagesPage = () => {
 
 
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        container.scrollTop = container.scrollHeight;
     };
 
     const fetchUserProfile = async (userId: string) => {
@@ -726,7 +727,7 @@ const MessagesPage = () => {
                                     </motion.div>
                                 );
                             })}
-                            <div ref={messagesEndRef} className="h-4" />
+                            <div className="h-4" />
                         </div>
 
                         {/* Input Area */}
