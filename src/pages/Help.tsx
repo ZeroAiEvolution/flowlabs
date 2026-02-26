@@ -40,10 +40,20 @@ const Help = () => {
 
         setIsSubmitting(true);
         try {
+            if (!user) throw new Error('You must be signed in to submit a request');
+
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('user_id', user.id)
+                .single();
+
+            if (profileError || !profile) throw profileError || new Error('Profile not found');
+
             const { error } = await (supabase as any)
                 .from('help_requests')
                 .insert({
-                    user_id: user.id,
+                    user_id: profile.id,
                     type: formData.type,
                     message: formData.message.trim()
                 });
