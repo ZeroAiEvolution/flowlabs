@@ -8,7 +8,7 @@ import { Input } from '../../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { Badge } from '../../components/ui/badge';
-import { UserPlus, Check, MessageSquare, Briefcase, GraduationCap, Plus, Clock, UserCheck, Search } from 'lucide-react';
+import { UserPlus, Check, MessageSquare, Briefcase, GraduationCap, Plus, Clock, UserCheck, Search, ArrowLeft } from 'lucide-react';
 import { useToast } from '../../components/ui/use-toast';
 import { Link, useSearchParams } from 'react-router-dom';
 import NetworkRequests from './NetworkRequests';
@@ -197,6 +197,16 @@ const NetworkPage = () => {
                         transition={{ duration: 0.5, type: 'spring', bounce: 0.4 }}
                         className="relative"
                     >
+                        <Button
+                            asChild
+                            className="mb-6 h-11 px-5 rounded-xl border-4 border-black bg-white text-black hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-y-1 hover:translate-x-1 transition-all"
+                        >
+                            <Link to="/home" aria-label="Go back to home">
+                                <ArrowLeft className="w-5 h-5 mr-2" />
+                                Back
+                            </Link>
+                        </Button>
+
                         <h1 className="text-5xl sm:text-6xl md:text-8xl font-black tracking-tighter text-black uppercase leading-none drop-shadow-[4px_4px_0px_rgba(0,0,0,0.2)]">
                             NETWORK
                         </h1>
