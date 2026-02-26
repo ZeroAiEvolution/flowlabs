@@ -228,7 +228,7 @@ const MessagesPage = () => {
 
 
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     };
 
     const fetchUserProfile = async (userId: string) => {
@@ -501,7 +501,7 @@ const MessagesPage = () => {
                     </h2>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div className="flex-1 overflow-y-scroll custom-scrollbar">
                     {loading ? (
                         <div className="p-8 flex flex-col items-center justify-center text-black font-bold uppercase gap-3">
                             <div className="w-8 h-8 border-4 border-black/20 border-t-black rounded-full animate-spin" />
@@ -606,7 +606,7 @@ const MessagesPage = () => {
                         </div>
 
                         {/* Messages List */}
-                        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar relative z-10">
+                        <div ref={messagesContainerRef} className="flex-1 overflow-y-scroll p-4 md:p-8 space-y-6 custom-scrollbar relative z-10">
                             {messages.map((msg, idx) => {
                                 const isMe = msg.sender_id === currentProfileId;
                                 const showAvatar = idx === messages.length - 1 || messages[idx + 1]?.sender_id !== msg.sender_id;
