@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Send, MoreVertical, MessageSquare, Ban, UserMinus, Unlock, Check, CheckCheck, Trash2 } from 'lucide-react';
+import { Send, MoreVertical, MessageSquare, Ban, UserMinus, Check, CheckCheck, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useToast } from '../../components/ui/use-toast';
@@ -49,6 +49,7 @@ const MessagesPage = () => {
     const [loading, setLoading] = useState(true);
     const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const activeChatRef = useRef<ChatUser | null>(null);
     const currentProfileIdRef = useRef<string | null>(null);
 
@@ -99,6 +100,8 @@ const MessagesPage = () => {
 
         if (!belongsToActiveChat) return;
 
+        let shouldScroll = false;
+
         setMessages(prev => {
             // If this message was deleted for me, remove if present.
             if (incoming.deleted_for?.includes(myProfileId)) {
@@ -112,12 +115,23 @@ const MessagesPage = () => {
                 return next;
             }
 
+            const container = messagesContainerRef.current;
+            const isNearBottom = !!container
+                ? container.scrollHeight - container.scrollTop - container.clientHeight < 120
+                : true;
+
+            shouldScroll = isNearBottom || incoming.sender_id === myProfileId;
+
             return [...prev, incoming].sort((a, b) => {
                 const at = a.created_at ? new Date(a.created_at).getTime() : 0;
                 const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
                 return at - bt;
             });
         });
+
+        if (shouldScroll) {
+            setTimeout(scrollToBottom, 40);
+        }
     }, []);
 
     // Realtime: listen to message inserts/updates relevant to this user.
@@ -188,7 +202,7 @@ const MessagesPage = () => {
 
     useEffect(() => {
         if (activeChat && currentProfileId) {
-            fetchMessages(activeChat.id, currentProfileId);
+            fetchMessages(activeChat.id, currentProfileId, false);
         }
     }, [activeChat, currentProfileId]);
 
@@ -199,7 +213,7 @@ const MessagesPage = () => {
 
         const poll = async () => {
             if (document.hidden) return;
-            await fetchMessages(activeChat.id, currentProfileId);
+            await fetchMessages(activeChat.id, currentProfileId, true);
             await fetchConversations(currentProfileId);
         };
 
@@ -270,6 +284,7 @@ const MessagesPage = () => {
                 };
             });
 
+            chats.sort((a, b) => a.full_name.localeCompare(b.full_name));
             setConversations(chats);
         } catch (error) {
             console.error(error);
@@ -278,7 +293,25 @@ const MessagesPage = () => {
         }
     };
 
-    const fetchMessages = async (otherUserId: string, myProfileId: string) => {
+    const areMessagesEqual = (a: Message[], b: Message[]) => {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            const x = a[i];
+            const y = b[i];
+            if (
+                x.id !== y.id ||
+                x.content !== y.content ||
+                x.is_read !== y.is_read ||
+                x.is_deleted_for_everyone !== y.is_deleted_for_everyone ||
+                (x.deleted_for?.join(',') || '') !== (y.deleted_for?.join(',') || '')
+            ) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const fetchMessages = async (otherUserId: string, myProfileId: string, preserveScroll = false) => {
         const { data, error } = await supabase
             .from('messages')
             .select('*')
@@ -288,8 +321,24 @@ const MessagesPage = () => {
         if (!error && data) {
             // Filter out messages deleted for me locally to avoid flashes
             const visibleMessages = data.filter(m => !m.deleted_for?.includes(myProfileId));
-            setMessages(visibleMessages);
-            setTimeout(scrollToBottom, 50);
+
+            const container = messagesContainerRef.current;
+            const isNearBottom = !!container
+                ? container.scrollHeight - container.scrollTop - container.clientHeight < 120
+                : true;
+
+            setMessages(prev => {
+                if (areMessagesEqual(prev, visibleMessages)) {
+                    return prev;
+                }
+
+                const hasNewMessages = visibleMessages.length > prev.length;
+                if (!preserveScroll || (hasNewMessages && isNearBottom)) {
+                    setTimeout(scrollToBottom, 40);
+                }
+
+                return visibleMessages;
+            });
 
             // Mark unread messages sent to me as read
             const unreadIds = visibleMessages
@@ -557,7 +606,7 @@ const MessagesPage = () => {
                         </div>
 
                         {/* Messages List */}
-                        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar relative z-10">
+                        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar relative z-10">
                             {messages.map((msg, idx) => {
                                 const isMe = msg.sender_id === currentProfileId;
                                 const showAvatar = idx === messages.length - 1 || messages[idx + 1]?.sender_id !== msg.sender_id;
