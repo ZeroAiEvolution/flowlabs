@@ -19,30 +19,6 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules")) {
-            if (id.includes("react") || id.includes("react-dom")) {
-              return "react-vendor";
-            }
-
-            if (id.includes("react-router-dom") || id.includes("@tanstack/react-query")) {
-              return "router-query-vendor";
-            }
-
-            if (id.includes("@supabase")) {
-              return "supabase-vendor";
-            }
-
-            if (id.includes("@radix-ui") || id.includes("lucide-react")) {
-              return "ui-vendor";
-            }
-
-            return "vendor";
-          }
-        },
-      },
-    },
+    chunkSizeWarningLimit: 1500,
   },
 }));
